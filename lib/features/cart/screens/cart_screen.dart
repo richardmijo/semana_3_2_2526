@@ -1,62 +1,54 @@
 // lib/features/cart/screens/cart_screen.dart
 import 'package:flutter/material.dart';
-import '../repositories/cart_repository.dart';
+import 'package:provider/provider.dart';
+import '../providers/cart_provider.dart';
 
-class CartScreen extends StatefulWidget {
-  // ⚠️ PROBLEMA: Tenemos que recibir el repositorio como parámetro
-  final CartRepository cartRepository;
-
-  const CartScreen({
-    Key? key,
-    required this.cartRepository,
-  }) : super(key: key);
-
-  @override
-  State<CartScreen> createState() => _CartScreenState();
-}
-
-class _CartScreenState extends State<CartScreen> {
-  
-  void _handleRemoveItem(String productId) {
-    setState(() {
-      // 🔴 setState actualiza solo esta pantalla
-      widget.cartRepository.removeProduct(productId);
-    });
-  }
-
-  void _handleClearCart() {
-    setState(() {
-      widget.cartRepository.clear();
-    });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Carrito limpiado'),
-        backgroundColor: Colors.orange,
-      ),
-    );
-  }
+// ✅ StatelessWidget (sin estado local)
+class CartScreen extends StatelessWidget {
+  const CartScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final cartItems = widget.cartRepository.getItems();
-    final total = widget.cartRepository.getTotal();
-
     return Scaffold(
       appBar: AppBar(
-        title: Text('Mi Carrito (${cartItems.length})'),
+        title: Consumer<CartProvider>(
+          builder: (context, cart, child) {
+            return Text('Mi Carrito (${cart.itemCount})');
+          },
+        ),
         backgroundColor: Colors.blue,
         actions: [
-          if (cartItems.isNotEmpty)
-            IconButton(
-              icon: Icon(Icons.delete_sweep),
-              onPressed: _handleClearCart,
-              tooltip: 'Limpiar carrito',
-            ),
+          Consumer<CartProvider>(
+            builder: (context, cart, child) {
+              if (cart.isEmpty) return SizedBox();
+              
+              return IconButton(
+                icon: Icon(Icons.delete_sweep),
+                onPressed: () {
+                  // 🚀 context.read para acciones (no escucha cambios)
+                  context.read<CartProvider>().clearCart();
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Carrito limpiado'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                },
+                tooltip: 'Limpiar carrito',
+              );
+            },
+          ),
         ],
       ),
-      body: cartItems.isEmpty
-          ? Center(
+      // 🎯 Consumer reconstruye automáticamente cuando cambia el carrito
+      body: Consumer<CartProvider>(
+        builder: (context, cartProvider, child) {
+          final cartItems = cartProvider.items;
+          final total = cartProvider.totalPrice;
+
+          if (cartItems.isEmpty) {
+            return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -68,73 +60,80 @@ class _CartScreenState extends State<CartScreen> {
                   ),
                 ],
               ),
-            )
-          : Column(
-              children: [
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: cartItems.length,
-                    itemBuilder: (context, index) {
-                      final product = cartItems[index];
-                      return Card(
-                        margin: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            child: Text('${index + 1}'),
-                          ),
-                          title: Text(product.name),
-                          subtitle: Text(
-                            '\$${product.price.toStringAsFixed(2)}',
-                            style: TextStyle(
-                              color: Colors.green,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          trailing: IconButton(
-                            icon: Icon(Icons.remove_circle, color: Colors.red),
-                            onPressed: () => _handleRemoveItem(product.id),
+            );
+          }
+
+          return Column(
+            children: [
+              Expanded(
+                child: ListView.builder(
+                  itemCount: cartItems.length,
+                  itemBuilder: (context, index) {
+                    final product = cartItems[index];
+                    return Card(
+                      margin: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          child: Text('${index + 1}'),
+                        ),
+                        title: Text(product.name),
+                        subtitle: Text(
+                          '\$${product.price.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      );
-                    },
-                  ),
+                        trailing: IconButton(
+                          icon: Icon(Icons.remove_circle, color: Colors.red),
+                          onPressed: () {
+                            // 🚀 Eliminar directamente
+                            cartProvider.removeProduct(product.id);
+                          },
+                        ),
+                      ),
+                    );
+                  },
                 ),
-                // Total del carrito
-                Container(
-                  padding: EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 4,
-                        offset: Offset(0, -2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'TOTAL:',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        '\$${total.toStringAsFixed(2)}',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
+              ),
+              // Total del carrito
+              Container(
+                padding: EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 4,
+                      offset: Offset(0, -2),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'TOTAL:',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      '\$${total.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }
